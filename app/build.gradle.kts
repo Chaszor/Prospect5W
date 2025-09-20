@@ -20,8 +20,15 @@ android {
     buildFeatures {
         compose = true
     }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
 }
-
+kotlin {
+    // ALSO ADD THIS to set the Kotlin compiler’s JVM target (pick the same version)
+    jvmToolchain(17)
+}
 dependencies {
     // Compose
     implementation(platform("androidx.compose:compose-bom:2024.10.00"))
