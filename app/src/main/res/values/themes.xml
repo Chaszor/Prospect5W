@@ -1,4 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <style name="Theme.Prospect5W" parent="android:Theme.Material.Light.NoActionBar" />
+    <!-- App theme that inherits Material 3, no action bar -->
+    <style name="Theme.Prospect5W" parent="Theme.Material3.DayNight.NoActionBar">
+        <!-- Optional window tweaks -->
+        <item name="android:statusBarColor">@android:color/transparent</item>
+        <item name="android:navigationBarColor">@android:color/transparent</item>
+    </style>
 </resources>
