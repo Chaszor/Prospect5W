@@ -6,7 +6,7 @@
     <application
         android:name=".App"
         android:allowBackup="true"
-        android:theme="@style/Theme.Prospect5W">
+        android:theme="@style/Theme.Material3.DayNight.NoActionBar">
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.files"
