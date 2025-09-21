@@ -1,46 +1,23 @@
 package com.yourname.prospect5w.data
 
-import androidx.room.*
+import androidx.room.Entity
+import androidx.room.Index
+import androidx.room.PrimaryKey
 
-@Entity(indices = [Index("companyId")])
-data class Contact(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val firstName: String,
-    val lastName: String,
-    val phone: String? = null,
-    val email: String? = null,
-    val title: String? = null,
-    val companyId: Long? = null,
-    val tags: String = ""
-)
-
-@Entity
-data class Company(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val name: String,
-    val city: String? = null,
-    val state: String? = null,
-    val notes: String? = null
-)
-
+/**
+ * Simple Event entity for prospecting/appointments/etc.
+ * Times are epoch millis (UTC). We'll compute "today" by local boundaries in DAO.
+ */
 @Entity(
-    foreignKeys = [
-        ForeignKey(entity = Contact::class, parentColumns = ["id"], childColumns = ["contactId"], onDelete = ForeignKey.CASCADE),
-        ForeignKey(entity = Company::class, parentColumns = ["id"], childColumns = ["companyId"], onDelete = ForeignKey.SET_NULL)
-    ],
-    indices = [Index("contactId"), Index("companyId"), Index("nextFollowUpAt")]
+    tableName = "events",
+    indices = [Index("startTime")]
 )
-data class Interaction(
-    @PrimaryKey(autoGenerate = true) val id: Long = 0,
-    val contactId: Long,
-    val companyId: Long? = null,
-    val whatType: String,
-    val whatNotes: String,
-    val whenAt: Long,
-    val whereLat: Double? = null,
-    val whereLng: Double? = null,
-    val whereText: String? = null,
-    val whySummary: String,
-    val nextFollowUpAt: Long? = null,
-    val followUpNote: String? = null
+data class Event(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0L,
+    val title: String,
+    val description: String = "",
+    val location: String = "",
+    val startTime: Long,            // epoch millis
+    val endTime: Long? = null,      // epoch millis
+    val createdAt: Long = System.currentTimeMillis()
 )

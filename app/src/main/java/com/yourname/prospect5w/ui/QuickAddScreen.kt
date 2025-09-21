@@ -1,83 +1,73 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.yourname.prospect5w.ui
+// (rest unchanged)
+
 
 import androidx.compose.foundation.layout.*
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.input.TextFieldValue
 import androidx.compose.ui.unit.dp
-import com.yourname.prospect5w.domain.ProspectRepo
-import com.yourname.prospect5w.notify.ReminderScheduler
+import com.yourname.prospect5w.EventViewModel
+import java.time.LocalDateTime
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @Composable
-fun QuickAddScreen(repo: ProspectRepo, scheduler: ReminderScheduler) {
-    var s by remember { mutableStateOf(QuickAddState()) }
-    val vm = remember { QuickAddVm(repo, scheduler) }
-    val save: () -> Unit = {
-        vm.save(s) {
-            s = QuickAddState()
-        }
-        Unit // ensure the lambda result is Unit, not Job
-    }
+fun QuickAddScreen(vm: EventViewModel, onSaved: () -> Unit) {
+    var title by remember { mutableStateOf(TextFieldValue("")) }
+    var location by remember { mutableStateOf(TextFieldValue("")) }
+    var description by remember { mutableStateOf(TextFieldValue("")) }
 
+    // Simple text-based date/time. Format: yyyy-MM-dd HH:mm
+    val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
+    val now = remember { LocalDateTime.now().withSecond(0).withNano(0) }
+    var startStr by remember { mutableStateOf(TextFieldValue(now.format(fmt))) }
+    var endStr by remember { mutableStateOf(TextFieldValue(now.plusHours(1).format(fmt))) }
 
-    Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
-        Text("Quick Add", style = MaterialTheme.typography.titleLarge)
-        Spacer(Modifier.height(8.dp))
-
-        Row(Modifier.fillMaxWidth()) {
+    Column(Modifier.fillMaxSize()) {
+        TopAppBar(title = { Text("Add Event") })
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
+            OutlinedTextField(title, { title = it }, label = { Text("Title*") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(location, { location = it }, label = { Text("Location") }, singleLine = true, modifier = Modifier.fillMaxWidth())
             OutlinedTextField(
-                value = s.firstName, onValueChange = { s = s.copy(firstName = it) },
-                label = { Text("First name") }, modifier = Modifier.weight(1f)
+                value = description, onValueChange = { description = it },
+                label = { Text("Description") }, modifier = Modifier.fillMaxWidth(), minLines = 3
             )
-            Spacer(Modifier.width(8.dp))
-            OutlinedTextField(
-                value = s.lastName, onValueChange = { s = s.copy(lastName = it) },
-                label = { Text("Last name") }, modifier = Modifier.weight(1f)
-            )
-        }
+            OutlinedTextField(startStr, { startStr = it }, label = { Text("Start (yyyy-MM-dd HH:mm)*") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            OutlinedTextField(endStr, { endStr = it }, label = { Text("End (yyyy-MM-dd HH:mm)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
 
-        OutlinedTextField(
-            value = s.companyName, onValueChange = { s = s.copy(companyName = it) },
-            label = { Text("Company") }, modifier = Modifier.fillMaxWidth()
-        )
-
-        OutlinedTextField(
-            value = s.whatNotes, onValueChange = { s = s.copy(whatNotes = it) },
-            label = { Text("What (notes)") }, modifier = Modifier.fillMaxWidth()
-        )
-
-        OutlinedTextField(
-            value = s.whereText ?: "", onValueChange = { s = s.copy(whereText = it) },
-            label = { Text("Where (address or note)") }, modifier = Modifier.fillMaxWidth()
-        )
-
-        OutlinedTextField(
-            value = s.why, onValueChange = { s = s.copy(why = it) },
-            label = { Text("Why (need / angle)") }, modifier = Modifier.fillMaxWidth()
-        )
-
-        OutlinedTextField(
-            value = s.followUpNote ?: "", onValueChange = { s = s.copy(followUpNote = it) },
-            label = { Text("Next step note (optional)") }, modifier = Modifier.fillMaxWidth()
-        )
-        Row {
-            Button(onClick = { s = s.copy(nextFollowUpAt = System.currentTimeMillis() + 24*60*60*1000) }) {
-                Text("Follow-up: +1 day")
+            val parse: (TextFieldValue) -> Long? = { v ->
+                runCatching { LocalDateTime.parse(v.text.trim(), fmt).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli() }.getOrNull()
             }
-            Spacer(Modifier.width(8.dp))
-            Button(onClick = { s = s.copy(nextFollowUpAt = null) }) { Text("Clear follow-up") }
+
+            val canSave = title.text.isNotBlank() && parse(startStr) != null
+
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                FilledTonalButton(onClick = {
+                    // Quick set to now/+1h
+                    startStr = TextFieldValue(LocalDateTime.now().withSecond(0).withNano(0).format(fmt))
+                    endStr = TextFieldValue(LocalDateTime.now().withSecond(0).withNano(0).plusHours(1).format(fmt))
+                }) { Text("Now +1h") }
+
+                Button(
+                    enabled = canSave,
+                    onClick = {
+                        val start = parse(startStr)!!
+                        val end = parse(endStr)
+                        vm.addQuick(
+                            title = title.text.trim(),
+                            description = description.text.trim(),
+                            location = location.text.trim(),
+                            startMillis = start,
+                            endMillis = end
+                        )
+                        onSaved()
+                    }
+                ) { Text("Save") }
+            }
         }
-
-        Spacer(Modifier.height(16.dp))
-        Button(
-            onClick = {
-                vm.save(s) { s = QuickAddState() }
-                Unit
-            },
-            modifier = Modifier.fillMaxWidth()
-        ) { Text("Save") }
-
     }
 }

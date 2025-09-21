@@ -10,17 +10,17 @@ import androidx.room.RoomDatabase
     version = 1,
     exportSchema = false
 )
-abstract class ProspectDb : RoomDatabase() {
+abstract class AppDatabase : RoomDatabase() {
     abstract fun dao(): ProspectDao
 
     companion object {
-        @Volatile private var INSTANCE: ProspectDb? = null
+        @Volatile private var INSTANCE: AppDatabase? = null
 
-        fun get(context: Context): ProspectDb =
+        fun get(context: Context): AppDatabase =
             INSTANCE ?: synchronized(this) {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
-                    ProspectDb::class.java,
+                    AppDatabase::class.java,
                     "prospect5w.db"
                 ).fallbackToDestructiveMigration().build().also { INSTANCE = it }
             }

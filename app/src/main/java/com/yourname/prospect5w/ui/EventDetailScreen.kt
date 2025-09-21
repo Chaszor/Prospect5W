@@ -1,66 +1,87 @@
+@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+
 package com.yourname.prospect5w.ui
 
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Text
+import androidx.compose.material3.TopAppBar
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.yourname.prospect5w.data.Interaction
-import com.yourname.prospect5w.domain.ProspectRepo
-import kotlinx.coroutines.launch
-import java.text.SimpleDateFormat
-import java.util.*
+import com.yourname.prospect5w.EventViewModel
+import com.yourname.prospect5w.data.Event
+import java.time.Instant
+import java.time.ZoneId
+import java.time.format.DateTimeFormatter
 
 @Composable
 fun EventDetailScreen(
-    id: Long,
-    repo: ProspectRepo,
-    onDeleted: () -> Unit = {}
+    vm: EventViewModel,
+    eventId: Long,
+    onBack: () -> Unit = {}
 ) {
-    var item by remember { mutableStateOf<Interaction?>(null) }
-    val scope = rememberCoroutineScope()
-    val fmt = remember { SimpleDateFormat("yyyy-MM-dd h:mm a", Locale.getDefault()) }
+    val events by vm.allEvents.collectAsState()
+    val event = events.firstOrNull { it.id == eventId }
 
-    LaunchedEffect(id) {
-        item = repo.getById(id)
-    }
-
-    val i = item
-    if (i == null) {
-        Box(Modifier.fillMaxSize().padding(24.dp)) { Text("Loading…") }
-        return
-    }
-
-    Scaffold(
-        topBar = { CenterAlignedTopAppBar(title = { Text("Event detail") }) }
-    ) { pad ->
-        Column(Modifier.padding(pad).padding(16.dp).fillMaxSize(), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text(buildTitle(i), style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-            Text("When: ${fmt.format(Date(i.whenAt))}")
-            if (!i.whatNotes.isNullOrBlank()) Text("Notes: ${i.whatNotes}")
-            if (!i.whereText.isNullOrBlank()) Text("Where: ${i.whereText}")
-            if (!i.whySummary.isNullOrBlank()) Text("Why: ${i.whySummary}")
-            if (i.nextFollowUpAt != null) Text("Next follow-up: ${fmt.format(Date(i.nextFollowUpAt))}")
-            Spacer(Modifier.height(16.dp))
-            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                Button(
-                    colors = ButtonDefaults.buttonColors(containerColor = MaterialTheme.colorScheme.error),
-                    onClick = {
-                        scope.launch {
-                            repo.deleteById(i.id)
-                            onDeleted()
-                        }
-                    }
-                ) { Text("Delete") }
-            }
+    Column(Modifier.fillMaxSize()) {
+        TopAppBar(title = { Text("Event Details") })
+        if (event == null) {
+            EmptyState("Event not found.")
+        } else {
+            EventDetailBody(event, onDelete = {
+                vm.delete(event.id)
+                onBack()
+            })
         }
     }
 }
 
-private fun buildTitle(i: Interaction): String {
-    val name = listOfNotNull(i.firstName, i.lastName).joinToString(" ").ifBlank { "Unknown" }
-    val company = i.companyName?.takeIf { it.isNotBlank() }
-    val what = i.whatType?.takeIf { it.isNotBlank() }
-    return listOfNotNull(name, company, what).joinToString(" • ")
+@Composable
+private fun EventDetailBody(e: Event, onDelete: () -> Unit) {
+    val dateFmt = DateTimeFormatter.ofPattern("MMM d, yyyy • h:mm a")
+    val tz = ZoneId.systemDefault()
+    val start = Instant.ofEpochMilli(e.startTime).atZone(tz)
+    val end = e.endTime?.let { Instant.ofEpochMilli(it).atZone(tz) }
+
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(12.dp)
+    ) {
+        Text(e.title, style = MaterialTheme.typography.titleLarge)
+        if (e.location.isNotBlank()) Text(e.location, style = MaterialTheme.typography.labelLarge)
+
+        Text(
+            if (end != null) "${dateFmt.format(start)} — ${dateFmt.format(end)}"
+            else dateFmt.format(start),
+            style = MaterialTheme.typography.bodyMedium
+        )
+
+        if (e.description.isNotBlank()) {
+            Text(e.description, style = MaterialTheme.typography.bodyMedium)
+        }
+
+        Button(onClick = onDelete) { Text("Delete") }
+    }
+}
+
+@Composable
+private fun EmptyState(msg: String) {
+    Column(
+        modifier = Modifier.fillMaxSize().padding(PaddingValues(24.dp)),
+        verticalArrangement = Arrangement.Center,
+        horizontalAlignment = Alignment.CenterHorizontally
+    ) {
+        Text(msg, style = MaterialTheme.typography.bodyLarge)
+    }
 }
