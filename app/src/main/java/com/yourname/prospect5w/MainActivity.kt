@@ -5,7 +5,6 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
 import androidx.compose.foundation.layout.padding
-import androidx.compose.material3.Icon
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
@@ -14,6 +13,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavDestination
+import androidx.navigation.NavDestination.Companion.hierarchy
 import androidx.navigation.NavGraph.Companion.findStartDestination
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -53,7 +53,7 @@ private fun AppScaffold(vm: EventViewModel) {
         bottomBar = {
             NavigationBar {
                 listOf(Dest.Today, Dest.Events, Dest.Add).forEach { d ->
-                    val selected = currentDest?.route == d.route
+                    val selected = currentDest?.hierarchy?.any { it.route == d.route } == true
                     NavigationBarItem(
                         selected = selected,
                         onClick = {
@@ -64,8 +64,7 @@ private fun AppScaffold(vm: EventViewModel) {
                             }
                         },
                         label = { Text(d.label) },
-                        // Simple bullet instead of icons dependency
-                        icon = { Text(if (selected) "●" else "○") }
+                        icon = { Text(if (selected) "●" else "○") } // simple bullet icons
                     )
                 }
             }
@@ -78,7 +77,18 @@ private fun AppScaffold(vm: EventViewModel) {
         ) {
             composable(Dest.Today.route) { TodayScreen(vm) }
             composable(Dest.Events.route) { EventsScreen(vm) }
-            composable(Dest.Add.route) { QuickAddScreen(vm, onSaved = { nav.navigate(Dest.Events.route) }) }
+            composable(Dest.Add.route) {
+                QuickAddScreen(
+                    vm,
+                    onSaved = {
+                        nav.navigate(Dest.Events.route) {
+                            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
+            }
         }
     }
 }
