@@ -1,3 +1,4 @@
+
 package com.yourname.prospect5w
 
 import android.os.Bundle
@@ -8,9 +9,12 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SnackbarHost
+import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.navigation.NavDestination
 import androidx.navigation.NavDestination.Companion.hierarchy
@@ -19,8 +23,8 @@ import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
+import com.yourname.prospect5w.ui.AddEditEventScreen
 import com.yourname.prospect5w.ui.EventsScreen
-import com.yourname.prospect5w.ui.QuickAddScreen
 import com.yourname.prospect5w.ui.TodayScreen
 import com.yourname.prospect5w.ui.theme.AppTheme
 
@@ -40,7 +44,8 @@ class MainActivity : ComponentActivity() {
 private enum class Dest(val route: String, val label: String) {
     Today("today", "Today"),
     Events("events", "All"),
-    Add("add", "Add")
+    Add("add", "Add"),
+    Edit("edit/{id}", "Edit")
 }
 
 @Composable
@@ -48,6 +53,7 @@ private fun AppScaffold(vm: EventViewModel) {
     val nav = rememberNavController()
     val backStack by nav.currentBackStackEntryAsState()
     val currentDest: NavDestination? = backStack?.destination
+    val snackbar = remember { SnackbarHostState() }
 
     Scaffold(
         bottomBar = {
@@ -64,11 +70,12 @@ private fun AppScaffold(vm: EventViewModel) {
                             }
                         },
                         label = { Text(d.label) },
-                        icon = { Text(if (selected) "●" else "○") } // simple bullet icons
+                        icon = { Text(if (selected) "●" else "○") }
                     )
                 }
             }
-        }
+        },
+        snackbarHost = { SnackbarHost(snackbar) }
     ) { paddingValues ->
         NavHost(
             navController = nav,
@@ -76,10 +83,42 @@ private fun AppScaffold(vm: EventViewModel) {
             modifier = Modifier.padding(paddingValues)
         ) {
             composable(Dest.Today.route) { TodayScreen(vm) }
-            composable(Dest.Events.route) { EventsScreen(vm) }
+            composable(Dest.Events.route) { EventsScreen(vm, snackbarHostState = snackbar, onEdit = { id ->
+                nav.navigate("edit/$id")
+            }) }
             composable(Dest.Add.route) {
-                QuickAddScreen(
-                    vm,
+                AddEditEventScreen(
+                    vm = vm,
+                    onSaved = {
+                        nav.navigate(Dest.Events.route) {
+                            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    }
+                )
+            }
+            composable("edit/{id}") { backStackEntry ->
+                val id = backStackEntry.arguments?.getString("id")?.toLongOrNull()
+                AddEditEventScreen(
+                    vm = vm,
+                    eventId = id,
+                    onSaved = {
+                        nav.navigate(Dest.Events.route) {
+                            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
+                            launchSingleTop = true
+                            restoreState = true
+                        }
+                    },
+                    onBack = { nav.popBackStack() }   // NEW: lets you leave edit
+                )
+            }
+
+            composable("edit/{id}") { backStackEntry ->
+                val id = backStackEntry.arguments?.getString("id")?.toLongOrNull()
+                AddEditEventScreen(
+                    vm = vm,
+                    eventId = id,
                     onSaved = {
                         nav.navigate(Dest.Events.route) {
                             popUpTo(nav.graph.findStartDestination().id) { saveState = true }

@@ -1,12 +1,11 @@
 @file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 
 package com.yourname.prospect5w.ui
-// (rest unchanged)
-
 
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -52,7 +51,7 @@ private fun TodayRow(e: Event) {
     val end = e.endTime?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()) }
     val line = if (end != null) "${tf.format(start)} — ${tf.format(end)}" else tf.format(start)
 
-    androidx.compose.material3.ElevatedCard {
+    ElevatedCard {
         Column(Modifier.padding(12.dp)) {
             Text(e.title, style = MaterialTheme.typography.titleMedium)
             Text(line, style = MaterialTheme.typography.bodySmall)
