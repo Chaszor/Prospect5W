@@ -132,6 +132,7 @@ fun AddEditEventScreen(
                             )
                             if (existing == null) vm.add(event) else vm.update(event)
                             onSaved()
+                            onBack()
                         }
                     ) { Text(if (existing == null) "Save" else "Update") }
                 }

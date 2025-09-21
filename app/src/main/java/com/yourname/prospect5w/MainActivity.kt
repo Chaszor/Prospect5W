@@ -95,7 +95,8 @@ private fun AppScaffold(vm: EventViewModel) {
                             launchSingleTop = true
                             restoreState = true
                         }
-                    }
+                    },
+                    onBack = { nav.popBackStack() }
                 )
             }
             composable("edit/{id}") { backStackEntry ->
@@ -111,21 +112,6 @@ private fun AppScaffold(vm: EventViewModel) {
                         }
                     },
                     onBack = { nav.popBackStack() }   // NEW: lets you leave edit
-                )
-            }
-
-            composable("edit/{id}") { backStackEntry ->
-                val id = backStackEntry.arguments?.getString("id")?.toLongOrNull()
-                AddEditEventScreen(
-                    vm = vm,
-                    eventId = id,
-                    onSaved = {
-                        nav.navigate(Dest.Events.route) {
-                            popUpTo(nav.graph.findStartDestination().id) { saveState = true }
-                            launchSingleTop = true
-                            restoreState = true
-                        }
-                    }
                 )
             }
         }

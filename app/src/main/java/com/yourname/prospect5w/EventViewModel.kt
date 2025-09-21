@@ -7,6 +7,7 @@ import androidx.lifecycle.viewModelScope
 import com.yourname.prospect5w.data.AppDatabase
 import com.yourname.prospect5w.data.Event
 import com.yourname.prospect5w.data.Repository
+import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
@@ -24,6 +25,7 @@ class EventViewModel(app: Application) : AndroidViewModel(app) {
             .stateIn(viewModelScope, SharingStarted.WhileSubscribed(5_000), emptyList())
 
     private val todayDate = MutableStateFlow(LocalDate.now())
+    @OptIn(ExperimentalCoroutinesApi::class)
     val todayEvents: StateFlow<List<Event>> =
         todayDate.flatMapLatest { date ->
             val zone = ZoneId.systemDefault()
