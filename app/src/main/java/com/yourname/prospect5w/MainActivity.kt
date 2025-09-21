@@ -6,16 +6,26 @@ import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.activity.result.ActivityResultLauncher
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.material3.*
-import androidx.compose.material3.icons.Icons
-import androidx.compose.material3.icons.filled.Add
-import androidx.compose.material3.icons.filled.Home
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Home
+import androidx.compose.material3.Icon
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.NavigationBar
+import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.Scaffold
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
-import androidx.navigation.compose.*
-import com.yourname.prospect5w.data.ProspectDb
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.currentBackStackEntryAsState
+import androidx.navigation.compose.rememberNavController
 import com.yourname.prospect5w.domain.ProspectRepo
 import com.yourname.prospect5w.notify.ReminderScheduler
 import com.yourname.prospect5w.notify.ensureNotificationChannel
@@ -28,14 +38,19 @@ class MainActivity : ComponentActivity() {
         fun intent(ctx: android.content.Context) = Intent(ctx, MainActivity::class.java)
     }
 
+    private lateinit var notifPermissionLauncher: ActivityResultLauncher<String>
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         ensureNotificationChannel(this)
 
+        // Register the permission launcher
+        notifPermissionLauncher = registerForActivityResult(
+            ActivityResultContracts.RequestPermission()
+        ) { /* granted -> you can react if needed */ }
+
         if (Build.VERSION.SDK_INT >= 33) {
-            registerForActivityResult(
-                ActivityResultContracts.RequestPermission()
-            ).launch(Manifest.permission.POST_NOTIFICATIONS)
+            notifPermissionLauncher.launch(Manifest.permission.POST_NOTIFICATIONS)
         }
 
         val db = (application as App).db
@@ -43,31 +58,43 @@ class MainActivity : ComponentActivity() {
         val scheduler = ReminderScheduler(this)
 
         setContent {
-            MaterialTheme {
-                val nav = rememberNavController()
-                Scaffold(
-                    bottomBar = {
-                        NavigationBar {
-                            NavigationBarItem(
-                                selected = nav.currentDestination?.route == "today",
-                                onClick = { nav.navigate("today") },
-                                label = { Text("Today") },
-                                icon = { Icon(Icons.Default.Home, null) }
-                            )
-                            NavigationBarItem(
-                                selected = nav.currentDestination?.route == "add",
-                                onClick = { nav.navigate("add") },
-                                label = { Text("Quick Add") },
-                                icon = { Icon(Icons.Default.Add, null) }
-                            )
-                        }
-                    }
-                ) { pad ->
-                    NavHost(nav, startDestination = "today", modifier = Modifier.padding(pad)) {
-                        composable("today") { TodayScreen(repo) }
-                        composable("add") { QuickAddScreen(repo, scheduler) }
-                    }
+            AppScaffold(repo = repo, scheduler = scheduler)
+        }
+    }
+}
+
+@Composable
+private fun AppScaffold(repo: ProspectRepo, scheduler: ReminderScheduler) {
+    MaterialTheme {
+        val nav = rememberNavController()
+        val backStackEntry by nav.currentBackStackEntryAsState()
+        val currentRoute = backStackEntry?.destination?.route
+
+        Scaffold(
+            bottomBar = {
+                NavigationBar {
+                    NavigationBarItem(
+                        selected = currentRoute == "today",
+                        onClick = { nav.navigate("today") },
+                        label = { Text("Today") },
+                        icon = { Icon(Icons.Filled.Home, contentDescription = "Today") }
+                    )
+                    NavigationBarItem(
+                        selected = currentRoute == "add",
+                        onClick = { nav.navigate("add") },
+                        label = { Text("Quick Add") },
+                        icon = { Icon(Icons.Filled.Add, contentDescription = "Quick Add") }
+                    )
                 }
+            }
+        ) { pad ->
+            NavHost(
+                navController = nav,
+                startDestination = "today",
+                modifier = Modifier.padding(pad)
+            ) {
+                composable("today") { TodayScreen(repo) }
+                composable("add") { QuickAddScreen(repo, scheduler) }
             }
         }
     }

@@ -24,8 +24,14 @@ android {
     composeOptions {
         kotlinCompilerExtensionVersion = "1.5.15"
     }
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
 }
-
+kotlin {
+    jvmToolchain(17)
+}
 dependencies {
     // Compose
     implementation(platform("androidx.compose:compose-bom:2024.10.00"))
@@ -52,4 +58,8 @@ dependencies {
 
     // Optional: location
     implementation("com.google.android.gms:play-services-location:21.3.0")
+
+    implementation("com.google.android.material:material:1.11.0")
+
+    implementation("androidx.compose.material:material-icons-extended")
 }

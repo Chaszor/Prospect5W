@@ -14,11 +14,13 @@ import com.yourname.prospect5w.notify.ReminderScheduler
 fun QuickAddScreen(repo: ProspectRepo, scheduler: ReminderScheduler) {
     var s by remember { mutableStateOf(QuickAddState()) }
     val vm = remember { QuickAddVm(repo, scheduler) }
-    val save = {
+    val save: () -> Unit = {
         vm.save(s) {
             s = QuickAddState()
         }
+        Unit // ensure the lambda result is Unit, not Job
     }
+
 
     Column(Modifier.padding(16.dp).verticalScroll(rememberScrollState())) {
         Text("Quick Add", style = MaterialTheme.typography.titleLarge)
@@ -69,6 +71,13 @@ fun QuickAddScreen(repo: ProspectRepo, scheduler: ReminderScheduler) {
         }
 
         Spacer(Modifier.height(16.dp))
-        Button(onClick = save, modifier = Modifier.fillMaxWidth()) { Text("Save") }
+        Button(
+            onClick = {
+                vm.save(s) { s = QuickAddState() }
+                Unit
+            },
+            modifier = Modifier.fillMaxWidth()
+        ) { Text("Save") }
+
     }
 }
