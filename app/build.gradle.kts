@@ -11,7 +11,7 @@ android {
 
     defaultConfig {
         applicationId = "com.yourname.prospect5w"
-        minSdk = 24
+        minSdk = 26
         targetSdk = 35
         versionCode = 1
         versionName = "1.0"
@@ -71,4 +71,8 @@ dependencies {
     androidTestImplementation ("androidx.test:core-ktx:1.5.0")
     androidTestImplementation ("androidx.test:runner:1.5.2")
     androidTestImplementation ("androidx.test:rules:1.5.0")
+
+    implementation("com.google.android.gms:play-services-location:21.3.0")
+    // optional: lets you 'await()' Tasks with coroutines
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1")
 }
