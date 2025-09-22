@@ -45,6 +45,17 @@ class EventViewModel(app: Application) : AndroidViewModel(app) {
     ) = viewModelScope.launch {
         repo.add(Event(title = title, description = description, location = location, startTime = startMillis, endTime = endMillis))
     }
+    // Archive a single event by ID
+    suspend fun archive(id: Long) {
+        val e = get(id) ?: return
+        update(e.copy(archived = true))
+    }
+
+    // Unarchive (if you want it)
+    suspend fun unarchive(id: Long) {
+        val e = get(id) ?: return
+        update(e.copy(archived = false))
+    }
 
     fun add(event: Event) = viewModelScope.launch { repo.add(event) }
     fun update(event: Event) = viewModelScope.launch { repo.update(event) }

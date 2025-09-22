@@ -19,5 +19,6 @@ data class Event(
     val location: String = "",
     val startTime: Long,            // epoch millis
     val endTime: Long? = null,      // epoch millis
-    val createdAt: Long = System.currentTimeMillis()
+    val createdAt: Long = System.currentTimeMillis(),
+    val archived: Boolean = false
 )

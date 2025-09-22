@@ -32,6 +32,8 @@ import kotlinx.coroutines.withContext
 import java.time.*
 import java.time.format.DateTimeFormatter
 import java.util.*
+import androidx.activity.result.contract.ActivityResultContracts.CreateDocument
+import com.yourname.prospect5w.export.eventsToCsv
 
 @Composable
 fun AddEditEventScreen(
@@ -77,7 +79,40 @@ fun AddEditEventScreen(
     val scope = rememberCoroutineScope()
     val fusedClient = remember { LocationServices.getFusedLocationProviderClient(ctx) }
     var locating by remember { mutableStateOf(false) }
-
+// --- Export state & launcher ---
+    var pendingExport: Event? by remember { mutableStateOf(null) }
+    var pendingArchiveAfterExport by remember { mutableStateOf(false) }
+    val exportLauncher = rememberLauncherForActivityResult(CreateDocument("text/csv")) { uri ->
+        val ev = pendingExport
+        if (uri != null && ev != null) {
+            // Build CSV for this single event
+            val csv = eventsToCsv(listOf(ev))
+            try {
+                val out = ctx.contentResolver.openOutputStream(uri)
+                out?.use { it.write(csv.toByteArray(Charsets.UTF_8)) }
+                // Optionally archive
+                if (pendingArchiveAfterExport) {
+                    // run in coroutine in case archive() is suspend
+                    val id = ev.id
+                    if (id != 0L) {
+                        // If your archive() is suspend:
+                        // scope.launch { vm.archive(id) }
+                        // If not suspend:
+                        scope.launch { vm.archive(id) }
+                    }
+                }
+                error = null
+            } catch (t: Throwable) {
+                error = "Export failed: ${t.message}"
+            }
+        } else if (uri == null && ev != null) {
+            // user cancelled save dialog
+            error = "Export cancelled"
+        }
+        // Clear pending regardless
+        pendingExport = null
+        pendingArchiveAfterExport = false
+    }
     suspend fun geocodeToAddress(lat: Double, lon: Double): String? = withContext(Dispatchers.IO) {
         try {
             val g = Geocoder(ctx, java.util.Locale.getDefault())
@@ -110,6 +145,7 @@ fun AddEditEventScreen(
             null
         }
     }
+
 
     // State used to launch settings dialog + retry safely (no forward references)
     var pendingResolution by remember { mutableStateOf<ResolvableApiException?>(null) }
@@ -371,6 +407,61 @@ fun AddEditEventScreen(
                             onBack()
                         }
                     ) { Text(if (existing == null) "Save" else "Update") }
+                    Spacer(Modifier.height(4.dp))
+
+                    Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                        // Export only (does not archive)
+                        OutlinedButton(
+                            enabled = existing != null, // only export an existing event; or allow new if you prefer
+                            onClick = {
+                                val start = strToMillis(startStr.text)
+                                val end = endStr.text.trim().takeIf { it.isNotEmpty() }?.let { strToMillis(it) }
+                                if (title.text.isBlank() || start == null) {
+                                    error = "Fill Title and valid Start to export."
+                                    return@OutlinedButton
+                                }
+                                // Build the current event snapshot (even if not saved)
+                                val ev = Event(
+                                    id = existing?.id ?: 0L,
+                                    title = title.text.trim(),
+                                    description = description.text.trim(),
+                                    location = location.text.trim(),
+                                    startTime = start,
+                                    endTime = end,
+                                    archived = existing?.archived ?: false
+                                )
+                                pendingArchiveAfterExport = false
+                                pendingExport = ev
+                                exportLauncher.launch("event-${ev.id.takeIf { it != 0L } ?: "draft"}.csv")
+                            }
+                        ) { Text("Export") }
+
+                        // Export & archive
+                        OutlinedButton(
+                            enabled = existing != null && (existing?.id ?: 0L) != 0L,
+                            onClick = {
+                                val start = strToMillis(startStr.text)
+                                val end = endStr.text.trim().takeIf { it.isNotEmpty() }?.let { strToMillis(it) }
+                                if (title.text.isBlank() || start == null) {
+                                    error = "Fill Title and valid Start to export."
+                                    return@OutlinedButton
+                                }
+                                val ev = Event(
+                                    id = existing?.id ?: 0L,
+                                    title = title.text.trim(),
+                                    description = description.text.trim(),
+                                    location = location.text.trim(),
+                                    startTime = start,
+                                    endTime = end,
+                                    archived = existing?.archived ?: false
+                                )
+                                pendingArchiveAfterExport = true
+                                pendingExport = ev
+                                exportLauncher.launch("event-${ev.id}.csv")
+                            }
+                        ) { Text("Export & Archive") }
+                    }
+
                 }
             }
         }
