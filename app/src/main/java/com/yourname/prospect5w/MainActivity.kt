@@ -24,6 +24,7 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.currentBackStackEntryAsState
 import androidx.navigation.compose.rememberNavController
 import com.yourname.prospect5w.ui.AddEditEventScreen
+import com.yourname.prospect5w.ui.ArchivesScreen
 import com.yourname.prospect5w.ui.EventsScreen
 import com.yourname.prospect5w.ui.TodayScreen
 import com.yourname.prospect5w.ui.theme.AppTheme
@@ -44,9 +45,11 @@ class MainActivity : ComponentActivity() {
 private enum class Dest(val route: String, val label: String) {
     Today("today", "Today"),
     Events("events", "All"),
+    Archived("archives", "Archived"),   // ← new
     Add("add", "Add"),
     Edit("edit/{id}", "Edit")
 }
+
 
 @Composable
 private fun AppScaffold(vm: EventViewModel) {
@@ -58,7 +61,7 @@ private fun AppScaffold(vm: EventViewModel) {
     Scaffold(
         bottomBar = {
             NavigationBar {
-                listOf(Dest.Today, Dest.Events, Dest.Add).forEach { d ->
+                listOf(Dest.Today, Dest.Events, Dest.Archived, Dest.Add).forEach { d ->
                     val selected = currentDest?.hierarchy?.any { it.route == d.route } == true
                     NavigationBarItem(
                         selected = selected,
@@ -86,6 +89,13 @@ private fun AppScaffold(vm: EventViewModel) {
             composable(Dest.Events.route) { EventsScreen(vm, snackbarHostState = snackbar, onEdit = { id ->
                 nav.navigate("edit/$id")
             }) }
+            composable(Dest.Archived.route) {
+                ArchivesScreen(
+                    vm = vm,
+                    snackbarHostState = snackbar,
+                    onOpen = { id -> nav.navigate("edit/$id") }
+                )
+            }
             composable(Dest.Add.route) {
                 AddEditEventScreen(
                     vm = vm,

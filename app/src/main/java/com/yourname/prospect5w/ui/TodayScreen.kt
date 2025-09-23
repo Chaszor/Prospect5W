@@ -9,9 +9,9 @@ import androidx.compose.material3.ElevatedCard
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -24,20 +24,36 @@ import java.time.format.DateTimeFormatter
 @Composable
 fun TodayScreen(vm: EventViewModel) {
     val events by vm.todayEvents.collectAsState()
+    var oldestFirst by rememberSaveable { mutableStateOf(true) }
+
+    // Hide archived + sort
+    val zone = ZoneId.systemDefault()
+    val todays = remember(events, oldestFirst) {
+        val base = events.filter { !it.archived }
+        if (oldestFirst) base.sortedBy { it.startTime } else base.sortedByDescending { it.startTime }
+    }
+
     Column(Modifier.fillMaxSize()) {
-        TopAppBar(title = { Text("Today") })
-        if (events.isEmpty()) {
+        TopAppBar(
+            title = { Text("Today") },
+            actions = {
+                TextButton(onClick = { oldestFirst = !oldestFirst }) {
+                    Text(if (oldestFirst) "Oldest First" else "Newest First")
+                }
+            }
+        )
+        if (todays.isEmpty()) {
             Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text("Nothing scheduled today.")
             }
         } else {
             LazyColumn(
-                Modifier.fillMaxSize(),
+                modifier = Modifier.fillMaxSize(),
                 contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(events, key = { it.id }) { e ->
-                    TodayRow(e)
+                items(todays, key = { it.id }) { e ->
+                    TodayRow(e, zone)
                 }
             }
         }
@@ -45,15 +61,15 @@ fun TodayScreen(vm: EventViewModel) {
 }
 
 @Composable
-private fun TodayRow(e: Event) {
+private fun TodayRow(e: Event, zone: ZoneId) {
     val tf = DateTimeFormatter.ofPattern("h:mm a")
-    val start = Instant.ofEpochMilli(e.startTime).atZone(ZoneId.systemDefault())
-    val end = e.endTime?.let { Instant.ofEpochMilli(it).atZone(ZoneId.systemDefault()) }
+    val start = Instant.ofEpochMilli(e.startTime).atZone(zone)
+    val end = e.endTime?.let { Instant.ofEpochMilli(it).atZone(zone) }
     val line = if (end != null) "${tf.format(start)} — ${tf.format(end)}" else tf.format(start)
 
     ElevatedCard {
         Column(Modifier.padding(12.dp)) {
-            Text(e.title, style = MaterialTheme.typography.titleMedium)
+            Text(e.title.ifBlank { "(no title)" }, style = MaterialTheme.typography.titleMedium)
             Text(line, style = MaterialTheme.typography.bodySmall)
             if (e.location.isNotBlank()) Text(e.location, style = MaterialTheme.typography.labelMedium)
             if (e.description.isNotBlank()) Text(e.description, style = MaterialTheme.typography.bodySmall)

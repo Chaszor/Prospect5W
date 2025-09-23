@@ -54,7 +54,13 @@ fun AddEditEventScreen(
 
     var title by remember(existing) { mutableStateOf(TextFieldValue(existing?.title ?: "")) }
     var location by remember(existing) { mutableStateOf(TextFieldValue(existing?.location ?: "")) }
-    var description by remember(existing) { mutableStateOf(TextFieldValue(existing?.description ?: "")) }
+    var description by remember(existing) {
+        mutableStateOf(
+            TextFieldValue(
+                existing?.description ?: ""
+            )
+        )
+    }
 
     val fmt = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm")
     val zone = ZoneId.systemDefault()
@@ -67,7 +73,13 @@ fun AddEditEventScreen(
     }.getOrNull()
 
     var startStr by remember(existing) {
-        mutableStateOf(TextFieldValue(millisToStr(existing?.startTime ?: System.currentTimeMillis())))
+        mutableStateOf(
+            TextFieldValue(
+                millisToStr(
+                    existing?.startTime ?: System.currentTimeMillis()
+                )
+            )
+        )
     }
     var endStr by remember(existing) {
         mutableStateOf(TextFieldValue(millisToStr(existing?.endTime)))
@@ -113,9 +125,11 @@ fun AddEditEventScreen(
         pendingExport = null
         pendingArchiveAfterExport = false
     }
+
     suspend fun geocodeToAddress(lat: Double, lon: Double): String? = withContext(Dispatchers.IO) {
         try {
             val g = Geocoder(ctx, java.util.Locale.getDefault())
+
             @Suppress("DEPRECATION")
             val res = g.getFromLocation(lat, lon, 1) ?: return@withContext null
             val addr = res.firstOrNull() ?: return@withContext null
@@ -168,7 +182,8 @@ fun AddEditEventScreen(
                 .setAlwaysShow(true)
                 .build()
 
-            val settingsResult = runCatching { settingsClient.checkLocationSettings(settingsReq).await() }
+            val settingsResult =
+                runCatching { settingsClient.checkLocationSettings(settingsReq).await() }
             if (settingsResult.isFailure) {
                 val ex = settingsResult.exceptionOrNull()
                 if (ex is ResolvableApiException) {
@@ -192,7 +207,8 @@ fun AddEditEventScreen(
             }.getOrNull()
 
             if (loc == null) {
-                error = "Couldn’t get current location. Ensure Precise location is allowed and try near a window."
+                error =
+                    "Couldn’t get current location. Ensure Precise location is allowed and try near a window."
                 return
             }
 
@@ -212,7 +228,8 @@ fun AddEditEventScreen(
         rememberLauncherForActivityResult(ActivityResultContracts.StartIntentSenderForResult()) { result ->
             retryAfterResolution = (result.resultCode == android.app.Activity.RESULT_OK)
             if (!retryAfterResolution) {
-                error = "Location needs to be enabled (Precise/High accuracy) to fetch your address."
+                error =
+                    "Location needs to be enabled (Precise/High accuracy) to fetch your address."
             }
         }
 
@@ -231,7 +248,18 @@ fun AddEditEventScreen(
             fetchAndFillAddress()
         }
     }
-
+    val events by vm.allEvents.collectAsState()
+    // Export ALL (ignores filters)
+    val exportAllLauncher = rememberLauncherForActivityResult(CreateDocument("text/csv")) { uri ->
+        if (uri != null) {
+            val csv = eventsToCsv(events) // export ALL
+            runCatching {
+                ctx.contentResolver.openOutputStream(uri)?.use { out ->
+                    out.write(csv.toByteArray(Charsets.UTF_8))
+                }
+            }
+        }
+    }
     val askLocationPerms = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestMultiplePermissions()
     ) { granted ->
@@ -243,7 +271,8 @@ fun AddEditEventScreen(
 
     fun onUseCurrentClicked() {
         val fine = ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_FINE_LOCATION)
-        val coarse = ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_COARSE_LOCATION)
+        val coarse =
+            ContextCompat.checkSelfPermission(ctx, Manifest.permission.ACCESS_COARSE_LOCATION)
         val hasPerm = fine == PackageManager.PERMISSION_GRANTED ||
                 coarse == PackageManager.PERMISSION_GRANTED
         if (hasPerm) scope.launch { fetchAndFillAddress() }
@@ -271,156 +300,164 @@ fun AddEditEventScreen(
             }, cal.get(Calendar.HOUR_OF_DAY), cal.get(Calendar.MINUTE), false).show()
         }, cal.get(Calendar.YEAR), cal.get(Calendar.MONTH), cal.get(Calendar.DAY_OF_MONTH)).show()
     }
-
     Column(Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text(if (eventId == null) "Add Event" else "Edit Event") },
-            navigationIcon = { TextButton(onClick = onBack) { Text("Back") } }
-        )
-        if (loading) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                CircularProgressIndicator()
-            }
-        } else {
-            Column(
-                Modifier.padding(16.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                OutlinedTextField(
-                    value = title,
-                    onValueChange = { title = it },
-                    label = { Text("Title*") },
-                    singleLine = true,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Row(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    modifier = Modifier.fillMaxWidth()
+        Column(Modifier.fillMaxSize()) {
+            TopAppBar(
+                title = { Text(if (eventId == null) "Add Event" else "Edit Event") },
+                navigationIcon = { TextButton(onClick = onBack) { Text("Back") } }
+            )
+            if (loading) {
+                Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+                    CircularProgressIndicator()
+                }
+            } else {
+                Column(
+                    Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     OutlinedTextField(
-                        value = location,
-                        onValueChange = { location = it },
-                        label = { Text("Location") },
+                        value = title,
+                        onValueChange = { title = it },
+                        label = { Text("Title*") },
                         singleLine = true,
-                        modifier = Modifier.weight(1f)
+                        modifier = Modifier.fillMaxWidth()
                     )
-                    FilledTonalButton(
-                        onClick = { onUseCurrentClicked() },
-                        enabled = !locating
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
                     ) {
-                        if (locating) {
-                            CircularProgressIndicator(
-                                strokeWidth = 2.dp,
-                                modifier = Modifier.size(18.dp)
-                            )
-                            Spacer(Modifier.width(8.dp))
-                            Text("Locating…")
-                        } else {
-                            Text("Use current")
+                        OutlinedTextField(
+                            value = location,
+                            onValueChange = { location = it },
+                            label = { Text("Location") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilledTonalButton(
+                            onClick = { onUseCurrentClicked() },
+                            enabled = !locating
+                        ) {
+                            if (locating) {
+                                CircularProgressIndicator(
+                                    strokeWidth = 2.dp,
+                                    modifier = Modifier.size(18.dp)
+                                )
+                                Spacer(Modifier.width(8.dp))
+                                Text("Locating…")
+                            } else {
+                                Text("Use current")
+                            }
                         }
                     }
-                }
 
-                OutlinedTextField(
-                    value = description,
-                    onValueChange = { description = it },
-                    label = { Text("Description") },
-                    minLines = 3,
-                    modifier = Modifier.fillMaxWidth()
-                )
-
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     OutlinedTextField(
-                        value = startStr,
-                        onValueChange = { startStr = it },
-                        label = { Text("Start* (yyyy-MM-dd HH:mm)") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
+                        value = description,
+                        onValueChange = { description = it },
+                        label = { Text("Description") },
+                        minLines = 3,
+                        modifier = Modifier.fillMaxWidth()
                     )
-                    FilledTonalButton(onClick = {
-                        val base = strToMillis(startStr.text)?.let {
-                            Instant.ofEpochMilli(it).atZone(zone).toLocalDateTime()
-                        }
-                        showDateTimePick(base) { dt ->
-                            startStr = TextFieldValue(dt.format(fmt))
-                        }
-                    }) { Text("Pick") }
-                }
 
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedTextField(
-                        value = endStr,
-                        onValueChange = { endStr = it },
-                        label = { Text("End (yyyy-MM-dd HH:mm)") },
-                        singleLine = true,
-                        modifier = Modifier.weight(1f)
-                    )
-                    FilledTonalButton(onClick = {
-                        val base = strToMillis(endStr.text)?.let {
-                            Instant.ofEpochMilli(it).atZone(zone).toLocalDateTime()
-                        }
-                        showDateTimePick(base) { dt ->
-                            endStr = TextFieldValue(dt.format(fmt))
-                        }
-                    }) { Text("Pick") }
-                }
-
-                error?.let {
-                    Text(it, color = MaterialTheme.colorScheme.error)
-                }
-
-                Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                    FilledTonalButton(onClick = {
-                        val now = LocalDateTime.now().withSecond(0).withNano(0)
-                        startStr = TextFieldValue(now.format(fmt))
-                        endStr = TextFieldValue(now.plusHours(1).format(fmt))
-                    }) { Text("Now +1h") }
-
-                    val canSave =
-                        title.text.isNotBlank() && strToMillis(startStr.text) != null
-                    Button(
-                        enabled = canSave,
-                        onClick = {
-                            val start = strToMillis(startStr.text)
-                            val end = endStr.text.trim().takeIf { it.isNotEmpty() }
-                                ?.let { strToMillis(it) }
-
-                            error = when {
-                                title.text.isBlank() -> "Title is required."
-                                start == null -> "Start time format invalid."
-                                end != null && end < start -> "End must be after start."
-                                else -> null
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = startStr,
+                            onValueChange = { startStr = it },
+                            label = { Text("Start* (yyyy-MM-dd HH:mm)") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilledTonalButton(onClick = {
+                            val base = strToMillis(startStr.text)?.let {
+                                Instant.ofEpochMilli(it).atZone(zone).toLocalDateTime()
                             }
-                            if (error != null) return@Button
+                            showDateTimePick(base) { dt ->
+                                startStr = TextFieldValue(dt.format(fmt))
+                            }
+                        }) { Text("Pick") }
+                    }
 
-                            val event = Event(
-                                id = existing?.id ?: 0L,
-                                title = title.text.trim(),
-                                description = description.text.trim(),
-                                location = location.text.trim(),
-                                startTime = start!!,
-                                endTime = end
-                            )
-                            if (existing == null) vm.add(event) else vm.update(event)
-                            onSaved()
-                            onBack()
-                        }
-                    ) { Text(if (existing == null) "Save" else "Update") }
-                    Spacer(Modifier.height(4.dp))
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedTextField(
+                            value = endStr,
+                            onValueChange = { endStr = it },
+                            label = { Text("End (yyyy-MM-dd HH:mm)") },
+                            singleLine = true,
+                            modifier = Modifier.weight(1f)
+                        )
+                        FilledTonalButton(onClick = {
+                            val base = strToMillis(endStr.text)?.let {
+                                Instant.ofEpochMilli(it).atZone(zone).toLocalDateTime()
+                            }
+                            showDateTimePick(base) { dt ->
+                                endStr = TextFieldValue(dt.format(fmt))
+                            }
+                        }) { Text("Pick") }
+                    }
 
+                    error?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error)
+                    }
+
+// --- Save row ---
                     Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                        // Export only (does not archive)
-                        OutlinedButton(
-                            enabled = existing != null, // only export an existing event; or allow new if you prefer
+                        FilledTonalButton(onClick = {
+                            val now = LocalDateTime.now().withSecond(0).withNano(0)
+                            startStr = TextFieldValue(now.format(fmt))
+                            endStr = TextFieldValue(now.plusMinutes(30).format(fmt))
+                        }) { Text("Now +30min") }
+
+                        FilledTonalButton(onClick = {
+                            val now = LocalDateTime.now().withSecond(0).withNano(0)
+                            startStr = TextFieldValue(now.format(fmt))
+                            endStr = TextFieldValue(now.plusHours(1).format(fmt))
+                        }) { Text("Now +1h") }
+                    }
+
+// --- Export row (new line) ---
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(12.dp),
+                        modifier = Modifier.padding(top = 8.dp)   // spacing above Export row
+                    ) {
+                        val canSave = title.text.isNotBlank() && strToMillis(startStr.text) != null
+                        Button(
+                            enabled = canSave,
                             onClick = {
                                 val start = strToMillis(startStr.text)
-                                val end = endStr.text.trim().takeIf { it.isNotEmpty() }?.let { strToMillis(it) }
+                                val end = endStr.text.trim().takeIf { it.isNotEmpty() }
+                                    ?.let { strToMillis(it) }
+
+                                error = when {
+                                    title.text.isBlank() -> "Title is required."
+                                    start == null -> "Start time format invalid."
+                                    end != null && end < start -> "End must be after start."
+                                    else -> null
+                                }
+                                if (error != null) return@Button
+
+                                val event = Event(
+                                    id = existing?.id ?: 0L,
+                                    title = title.text.trim(),
+                                    description = description.text.trim(),
+                                    location = location.text.trim(),
+                                    startTime = start!!,
+                                    endTime = end
+                                )
+                                if (existing == null) vm.add(event) else vm.update(event)
+                                onSaved()
+                                onBack()
+                            }
+                        ) { Text(if (existing == null) "Save" else "Update") }
+                        OutlinedButton(
+                            enabled = existing != null,
+                            onClick = {
+                                val start = strToMillis(startStr.text)
+                                val end = endStr.text.trim().takeIf { it.isNotEmpty() }
+                                    ?.let { strToMillis(it) }
                                 if (title.text.isBlank() || start == null) {
                                     error = "Fill Title and valid Start to export."
                                     return@OutlinedButton
                                 }
-                                // Build the current event snapshot (even if not saved)
                                 val ev = Event(
                                     id = existing?.id ?: 0L,
                                     title = title.text.trim(),
@@ -436,32 +473,9 @@ fun AddEditEventScreen(
                             }
                         ) { Text("Export") }
 
-                        // Export & archive
-                        OutlinedButton(
-                            enabled = existing != null && (existing?.id ?: 0L) != 0L,
-                            onClick = {
-                                val start = strToMillis(startStr.text)
-                                val end = endStr.text.trim().takeIf { it.isNotEmpty() }?.let { strToMillis(it) }
-                                if (title.text.isBlank() || start == null) {
-                                    error = "Fill Title and valid Start to export."
-                                    return@OutlinedButton
-                                }
-                                val ev = Event(
-                                    id = existing?.id ?: 0L,
-                                    title = title.text.trim(),
-                                    description = description.text.trim(),
-                                    location = location.text.trim(),
-                                    startTime = start,
-                                    endTime = end,
-                                    archived = existing?.archived ?: false
-                                )
-                                pendingArchiveAfterExport = true
-                                pendingExport = ev
-                                exportLauncher.launch("event-${ev.id}.csv")
-                            }
-                        ) { Text("Export & Archive") }
-                    }
+                        // Here you could add "Export & Archive" button too if desired
 
+                    }
                 }
             }
         }
