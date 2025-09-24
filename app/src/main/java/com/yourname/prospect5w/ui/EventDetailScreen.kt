@@ -29,8 +29,8 @@ fun EventDetailScreen(
     eventId: Long,
     onBack: () -> Unit = {}
 ) {
-    val events by vm.allEvents.collectAsState()
-    val event = events.firstOrNull { it.id == eventId }
+    val events by vm.events.collectAsState(initial = emptyList())
+    val event = events.firstOrNull { e -> e.id == eventId }
 
     Column(Modifier.fillMaxSize()) {
         TopAppBar(title = { Text("Event Details") })
@@ -38,7 +38,7 @@ fun EventDetailScreen(
             EmptyState("Event not found.")
         } else {
             EventDetailBody(event, onDelete = {
-                vm.delete(event.id)
+                vm.deleteById(event.id)
                 onBack()
             })
         }
@@ -78,7 +78,9 @@ private fun EventDetailBody(e: Event, onDelete: () -> Unit) {
 @Composable
 private fun EmptyState(msg: String) {
     Column(
-        modifier = Modifier.fillMaxSize().padding(PaddingValues(24.dp)),
+        modifier = Modifier
+            .fillMaxSize()
+            .padding(PaddingValues(24.dp)),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {

@@ -28,7 +28,7 @@ fun EventsScreen(
     onEdit: (Long) -> Unit
 ) {
     // Pull everything; we'll hide archived here
-    val events by vm.allEvents.collectAsState()
+    val events by vm.events.collectAsState(initial = emptyList())
 
     var query by remember { mutableStateOf("") }
     var startFilter: LocalDate? by remember { mutableStateOf(null) }
@@ -48,19 +48,19 @@ fun EventsScreen(
 
     // Hide archived first, then apply query/date filters
     val base = events
-        .filter { !it.archived }
-        .filter {
+        .filter { e -> !e.archived }
+        .filter { e ->
             val q = query.trim().lowercase()
-            val textMatch = q.isBlank() || listOf(it.title, it.location, it.description)
+            val textMatch = q.isBlank() || listOf(e.title, e.location, e.description)
                 .any { s -> s.lowercase().contains(q) }
-            textMatch && withinRange(it)
+            textMatch && withinRange(e)
         }
 
     // Apply sort order
     val filtered = if (oldestFirst) {
-        base.sortedBy { it.startTime }
+        base.sortedBy { e -> e.startTime }
     } else {
-        base.sortedByDescending { it.startTime }
+        base.sortedByDescending { e -> e.startTime }
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -71,12 +71,12 @@ fun EventsScreen(
                 TextButton(
                     onClick = {
                         scope.launch {
-                            val idsToArchive = events.filter { !it.archived }.map { it.id }
+                            val idsToArchive = events.filter { e -> !e.archived }.map { e -> e.id }
                             if (idsToArchive.isEmpty()) {
                                 snackbarHostState.showSnackbar("Nothing to archive")
                                 return@launch
                             }
-                            idsToArchive.forEach { vm.archive(it) }
+                            idsToArchive.forEach { id -> vm.archive(id) }
                             val res = snackbarHostState.showSnackbar(
                                 message = "Archived ${idsToArchive.size} event(s)",
                                 actionLabel = "Undo",
@@ -84,7 +84,7 @@ fun EventsScreen(
                                 duration = SnackbarDuration.Short
                             )
                             if (res == SnackbarResult.ActionPerformed) {
-                                idsToArchive.forEach { vm.unarchive(it) }
+                                idsToArchive.forEach { id -> vm.unarchive(id) }
                             }
                         }
                     }
@@ -116,11 +116,11 @@ fun EventsScreen(
                 contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(filtered, key = { it.id }) { e ->
+                items(filtered, key = { e -> e.id }) { e ->
                     EventRow(
                         e = e,
-                        onDelete = { event: Event ->
-                            vm.delete(event.id)
+                        onDelete = { ev: Event ->
+                            vm.deleteById(ev.id)
                             scope.launch {
                                 val res = snackbarHostState.showSnackbar(
                                     message = "Event deleted",
@@ -129,22 +129,22 @@ fun EventsScreen(
                                     duration = SnackbarDuration.Short
                                 )
                                 if (res == SnackbarResult.ActionPerformed) {
-                                    vm.add(event.copy(id = 0L))
+                                    vm.add(ev.copy(id = 0L))
                                 }
                             }
                         },
                         onEdit = { onEdit(e.id) },
-                        onArchive = { event: Event ->
-                            vm.archive(event.id)
+                        onArchive = { ev: Event ->
+                            vm.archive(ev.id)
                             scope.launch {
                                 val res = snackbarHostState.showSnackbar(
-                                    message = "Archived “${event.title.ifBlank { "Untitled" }}”",
+                                    message = "Archived “${ev.title.ifBlank { "Untitled" }}”",
                                     actionLabel = "Undo",
                                     withDismissAction = true,
                                     duration = SnackbarDuration.Short
                                 )
                                 if (res == SnackbarResult.ActionPerformed) {
-                                    vm.unarchive(event.id)
+                                    vm.unarchive(ev.id)
                                 }
                             }
                         },

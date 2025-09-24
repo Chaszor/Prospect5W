@@ -1,4 +1,3 @@
-
 package com.yourname.prospect5w
 
 import android.os.Bundle
@@ -30,6 +29,8 @@ import com.yourname.prospect5w.ui.TodayScreen
 import com.yourname.prospect5w.ui.theme.AppTheme
 
 class MainActivity : ComponentActivity() {
+
+    // Default factory works because EventViewModel(app) has a single-arg constructor.
     private val vm: EventViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -45,11 +46,10 @@ class MainActivity : ComponentActivity() {
 private enum class Dest(val route: String, val label: String) {
     Today("today", "Today"),
     Events("events", "All"),
-    Archived("archives", "Archived"),   // ← new
+    Archived("archives", "Archived"),
     Add("add", "Add"),
     Edit("edit/{id}", "Edit")
 }
-
 
 @Composable
 private fun AppScaffold(vm: EventViewModel) {
@@ -86,9 +86,13 @@ private fun AppScaffold(vm: EventViewModel) {
             modifier = Modifier.padding(paddingValues)
         ) {
             composable(Dest.Today.route) { TodayScreen(vm) }
-            composable(Dest.Events.route) { EventsScreen(vm, snackbarHostState = snackbar, onEdit = { id ->
-                nav.navigate("edit/$id")
-            }) }
+            composable(Dest.Events.route) {
+                EventsScreen(
+                    vm = vm,
+                    snackbarHostState = snackbar,
+                    onEdit = { id -> nav.navigate("edit/$id") }
+                )
+            }
             composable(Dest.Archived.route) {
                 ArchivesScreen(
                     vm = vm,
@@ -121,7 +125,7 @@ private fun AppScaffold(vm: EventViewModel) {
                             restoreState = true
                         }
                     },
-                    onBack = { nav.popBackStack() }   // NEW: lets you leave edit
+                    onBack = { nav.popBackStack() }
                 )
             }
         }

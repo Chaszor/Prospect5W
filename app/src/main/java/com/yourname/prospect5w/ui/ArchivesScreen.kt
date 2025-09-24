@@ -14,7 +14,6 @@ import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.yourname.prospect5w.EventViewModel
@@ -30,15 +29,15 @@ fun ArchivesScreen(
     snackbarHostState: SnackbarHostState,
     onOpen: (Long) -> Unit = {}
 ) {
-    val events by vm.allEvents.collectAsState()
-    val archived = remember(events) { events.filter { it.archived } }
+    val events by vm.events.collectAsState(initial = emptyList())
+    val archived = remember(events) { events.filter { e -> e.archived } }
 
     var query by remember { mutableStateOf("") }
     var startFilter: LocalDate? by remember { mutableStateOf(null) }
     var endFilter: LocalDate? by remember { mutableStateOf(null) }
     var oldestFirst by rememberSaveable { mutableStateOf(true) } // <-- sort toggle
 
-    val ctx = LocalContext.current
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     val zone = ZoneId.systemDefault()
 
@@ -59,7 +58,7 @@ fun ArchivesScreen(
                 ctx.contentResolver.openInputStream(uri)?.use { input ->
                     val text = input.bufferedReader().readText()
                     val imported = csvToEvents(text).map { it.copy(archived = true, id = 0L) }
-                    imported.forEach { vm.add(it) }
+                    imported.forEach { ev -> vm.add(ev) }
                 }
             }.onSuccess {
                 scope.launch { snackbarHostState.showSnackbar("Imported archived events") }
@@ -68,6 +67,7 @@ fun ArchivesScreen(
             }
         }
     }
+
     @Composable
     fun FilterBar(
         query: String,
@@ -106,35 +106,6 @@ fun ArchivesScreen(
         }
     }
 
-    @Composable
-    fun DateField(
-        label: String,
-        date: LocalDate?,
-        onPick: (LocalDate?) -> Unit,
-        modifier: Modifier = Modifier
-    ) {
-        val ctx = androidx.compose.ui.platform.LocalContext.current
-        val cal = java.util.Calendar.getInstance()
-        val year = date?.year ?: cal.get(java.util.Calendar.YEAR)
-        val month = (date?.monthValue ?: (cal.get(java.util.Calendar.MONTH) + 1)) - 1
-        val day = date?.dayOfMonth ?: cal.get(java.util.Calendar.DAY_OF_MONTH)
-
-        Row(modifier, verticalAlignment = Alignment.CenterVertically) {
-            OutlinedTextField(
-                value = date?.toString() ?: "",
-                onValueChange = {},
-                label = { Text(label) },
-                readOnly = true,
-                modifier = Modifier.weight(1f)
-            )
-            FilledTonalButton(onClick = {
-                android.app.DatePickerDialog(ctx, { _, y, m, d ->
-                    onPick(LocalDate.of(y, m + 1, d))
-                }, year, month, day).show()
-            }) { Text("Pick") }
-        }
-    }
-
     fun withinRange(e: Event): Boolean {
         val d = Instant.ofEpochMilli(e.startTime).atZone(zone).toLocalDate()
         val afterStart = startFilter?.let { d >= it } ?: true
@@ -142,17 +113,17 @@ fun ArchivesScreen(
         return afterStart && beforeEnd
     }
 
-    val filteredBase = archived.filter {
+    val filteredBase = archived.filter { e ->
         val q = query.trim().lowercase()
-        val textMatch = q.isBlank() || listOf(it.title, it.location, it.description).any { s -> s.lowercase().contains(q) }
-        textMatch && withinRange(it)
+        val textMatch = q.isBlank() || listOf(e.title, e.location, e.description).any { s -> s.lowercase().contains(q) }
+        textMatch && withinRange(e)
     }
 
     // Apply sort order
     val filtered = if (oldestFirst) {
-        filteredBase.sortedBy { it.startTime }
+        filteredBase.sortedBy { e -> e.startTime }
     } else {
-        filteredBase.sortedByDescending { it.startTime }
+        filteredBase.sortedByDescending { e -> e.startTime }
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -190,7 +161,7 @@ fun ArchivesScreen(
                 contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(filtered, key = { it.id }) { e ->
+                items(filtered, key = { e -> e.id }) { e ->
                     ArchiveRow(
                         e = e,
                         onUnarchive = {
@@ -200,7 +171,7 @@ fun ArchivesScreen(
                             }
                         },
                         onDelete = { ev ->
-                            vm.delete(ev.id)
+                            vm.deleteById(ev.id)
                             scope.launch {
                                 val res = snackbarHostState.showSnackbar(
                                     message = "Archived event deleted",
@@ -262,7 +233,7 @@ private fun csvToEvents(csv: String): List<Event> {
 
             add(
                 Event(
-                    id = 0L, // let VM assign
+                    id = 0L, // let DB assign
                     title = title,
                     description = description,
                     location = location,

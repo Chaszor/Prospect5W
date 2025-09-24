@@ -18,19 +18,26 @@ import androidx.compose.ui.unit.dp
 import com.yourname.prospect5w.EventViewModel
 import com.yourname.prospect5w.data.Event
 import java.time.Instant
+import java.time.LocalDate
 import java.time.ZoneId
 import java.time.format.DateTimeFormatter
 
 @Composable
 fun TodayScreen(vm: EventViewModel) {
-    val events by vm.todayEvents.collectAsState()
+    val allEvents by vm.events.collectAsState(initial = emptyList())
     var oldestFirst by rememberSaveable { mutableStateOf(true) }
 
-    // Hide archived + sort
     val zone = ZoneId.systemDefault()
-    val todays = remember(events, oldestFirst) {
-        val base = events.filter { !it.archived }
-        if (oldestFirst) base.sortedBy { it.startTime } else base.sortedByDescending { it.startTime }
+    val startOfDay = remember {
+        LocalDate.now(zone).atStartOfDay(zone).toInstant().toEpochMilli()
+    }
+    val endOfDay = remember { startOfDay + 24L * 60 * 60 * 1000L }
+
+    val todays = remember(allEvents, oldestFirst) {
+        val base = allEvents
+            .filter { e -> !e.archived }
+            .filter { e -> e.startTime in startOfDay until endOfDay }
+        if (oldestFirst) base.sortedBy { e -> e.startTime } else base.sortedByDescending { e -> e.startTime }
     }
 
     Column(Modifier.fillMaxSize()) {
@@ -52,7 +59,7 @@ fun TodayScreen(vm: EventViewModel) {
                 contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(todays, key = { it.id }) { e ->
+                items(todays, key = { e -> e.id }) { e ->
                     TodayRow(e, zone)
                 }
             }
