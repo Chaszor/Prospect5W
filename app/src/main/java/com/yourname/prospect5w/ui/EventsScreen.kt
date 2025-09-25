@@ -1,17 +1,34 @@
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.foundation.ExperimentalFoundationApi::class
+)
 
 package com.yourname.prospect5w.ui
 
-import androidx.compose.foundation.clickable
+import android.content.Intent
+import android.net.Uri
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.VisibilityThreshold
+import androidx.compose.animation.core.spring
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+//import androidx.compose.foundation.lazy.LazyItemScope.animateItem
 import androidx.compose.foundation.lazy.items
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.Undo
+import androidx.compose.material.icons.filled.*
 import androidx.compose.material3.*
+import androidx.compose.material3.SwipeToDismissBox
+import androidx.compose.material3.SwipeToDismissBoxValue
+import androidx.compose.material3.rememberSwipeToDismissBoxState
 import androidx.compose.runtime.*
-import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import com.yourname.prospect5w.EventViewModel
 import com.yourname.prospect5w.data.Event
@@ -27,78 +44,66 @@ fun EventsScreen(
     snackbarHostState: SnackbarHostState,
     onEdit: (Long) -> Unit
 ) {
-    // Pull everything; we'll hide archived here
+    val context = LocalContext.current
+    val zone = ZoneId.systemDefault()
+    val scope = rememberCoroutineScope()
+
     val events by vm.events.collectAsState(initial = emptyList())
 
     var query by remember { mutableStateOf("") }
     var startFilter: LocalDate? by remember { mutableStateOf(null) }
     var endFilter: LocalDate? by remember { mutableStateOf(null) }
-    val scope = rememberCoroutineScope()
-    val zone = ZoneId.systemDefault()
+    var oldestFirst by remember { mutableStateOf(true) }
 
-    // Sort toggle (persist across recompositions & config changes)
-    var oldestFirst by rememberSaveable { mutableStateOf(true) }
+    val selected = remember { mutableStateListOf<Long>() }
+    val selectionMode = selected.isNotEmpty()
 
     fun withinRange(e: Event): Boolean {
         val d = Instant.ofEpochMilli(e.startTime).atZone(zone).toLocalDate()
-        val afterStart = startFilter?.let { d >= it } ?: true
-        val beforeEnd = endFilter?.let { d <= it } ?: true
-        return afterStart && beforeEnd
+        val sOk = startFilter?.let { d >= it } ?: true
+        val eOk = endFilter?.let { d <= it } ?: true
+        return sOk && eOk
     }
 
-    // Hide archived first, then apply query/date filters
-    val base = events
-        .filter { e -> !e.archived }
+    val active = events
+        .filter { !it.archived }
         .filter { e ->
             val q = query.trim().lowercase()
-            val textMatch = q.isBlank() || listOf(e.title, e.location, e.description)
-                .any { s -> s.lowercase().contains(q) }
-            textMatch && withinRange(e)
+            (q.isBlank() || listOf(e.title, e.location, e.description).any { s -> s.lowercase().contains(q) }) &&
+                    withinRange(e)
         }
 
-    // Apply sort order
-    val filtered = if (oldestFirst) {
-        base.sortedBy { e -> e.startTime }
-    } else {
-        base.sortedByDescending { e -> e.startTime }
-    }
+    val items = if (oldestFirst) active.sortedBy { it.startTime } else active.sortedByDescending { it.startTime }
 
     Column(Modifier.fillMaxSize()) {
-        TopAppBar(
-            title = { Text("All Events") },
-            actions = {
-                // Archive All
-                TextButton(
-                    onClick = {
-                        scope.launch {
-                            val idsToArchive = events.filter { e -> !e.archived }.map { e -> e.id }
-                            if (idsToArchive.isEmpty()) {
-                                snackbarHostState.showSnackbar("Nothing to archive")
-                                return@launch
-                            }
-                            idsToArchive.forEach { id -> vm.archive(id) }
-                            val res = snackbarHostState.showSnackbar(
-                                message = "Archived ${idsToArchive.size} event(s)",
-                                actionLabel = "Undo",
-                                withDismissAction = true,
-                                duration = SnackbarDuration.Short
-                            )
-                            if (res == SnackbarResult.ActionPerformed) {
-                                idsToArchive.forEach { id -> vm.unarchive(id) }
-                            }
-                        }
-                    }
-                ) { Text("Archive All") }
-                // Sort toggle
-                TextButton(onClick = { oldestFirst = !oldestFirst }) {
-                    Text(if (oldestFirst) "Oldest First" else "Newest First")
+        TopBar(
+            selectionMode = selectionMode,
+            selectedCount = selected.size,
+            onClearSelection = { selected.clear() },
+            onSelectAll = { selected.clear(); selected.addAll(items.map { it.id }) },
+            onBulkArchive = {
+                val ids = selected.toList()
+                selected.clear()
+                scope.launch {
+                    ids.forEach { vm.archive(it) }
+                    val res = snackbarHostState.showSnackbar("Archived ${ids.size} item(s)", "Undo", true)
+                    if (res == SnackbarResult.ActionPerformed) ids.forEach { vm.unarchive(it) }
                 }
-            }
-        )
-
-        FilterBar(
+            },
+            onBulkDelete = {
+                val toDelete = items.filter { it.id in selected }.map { it.copy() }
+                val ids = toDelete.map { it.id }
+                selected.clear()
+                scope.launch {
+                    ids.forEach { vm.deleteById(it) }
+                    val res = snackbarHostState.showSnackbar("Deleted ${ids.size} item(s)", "Undo", true)
+                    if (res == SnackbarResult.ActionPerformed) toDelete.forEach { vm.add(it.copy(id = 0L)) }
+                }
+            },
             query = query,
             onQueryChange = { query = it },
+            oldestFirst = oldestFirst,
+            onToggleSort = { oldestFirst = !oldestFirst },
             start = startFilter,
             end = endFilter,
             onSetStart = { startFilter = it },
@@ -106,62 +111,271 @@ fun EventsScreen(
             onClearDates = { startFilter = null; endFilter = null }
         )
 
-        if (filtered.isEmpty()) {
-            Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-                Text("No matching events.")
-            }
+        if (items.isEmpty()) {
+            Box(
+                Modifier.weight(1f).fillMaxWidth(),
+                contentAlignment = Alignment.Center
+            ) { Text("No matching events.") }
         } else {
             LazyColumn(
-                modifier = Modifier.fillMaxSize(),
+                modifier = Modifier.weight(1f).fillMaxWidth(),
                 contentPadding = PaddingValues(12.dp),
                 verticalArrangement = Arrangement.spacedBy(8.dp)
             ) {
-                items(filtered, key = { e -> e.id }) { e ->
-                    EventRow(
-                        e = e,
-                        onDelete = { ev: Event ->
-                            vm.deleteById(ev.id)
-                            scope.launch {
-                                val res = snackbarHostState.showSnackbar(
-                                    message = "Event deleted",
-                                    actionLabel = "Undo",
-                                    withDismissAction = true,
-                                    duration = SnackbarDuration.Short
-                                )
-                                if (res == SnackbarResult.ActionPerformed) {
-                                    vm.add(ev.copy(id = 0L))
+                items(items, key = { it.id }) { e ->
+                    val dismissState = rememberSwipeToDismissBoxState(
+                        confirmValueChange = { value ->
+                            when (value) {
+                                SwipeToDismissBoxValue.StartToEnd -> { // swipe right → archive
+                                    scope.launch {
+                                        vm.archive(e.id)
+                                        val res = snackbarHostState.showSnackbar("Archived", "Undo", true)
+                                        if (res == SnackbarResult.ActionPerformed) vm.unarchive(e.id)
+                                    }
+                                    true
                                 }
-                            }
-                        },
-                        onEdit = { onEdit(e.id) },
-                        onArchive = { ev: Event ->
-                            vm.archive(ev.id)
-                            scope.launch {
-                                val res = snackbarHostState.showSnackbar(
-                                    message = "Archived “${ev.title.ifBlank { "Untitled" }}”",
-                                    actionLabel = "Undo",
-                                    withDismissAction = true,
-                                    duration = SnackbarDuration.Short
-                                )
-                                if (res == SnackbarResult.ActionPerformed) {
-                                    vm.unarchive(ev.id)
+                                SwipeToDismissBoxValue.EndToStart -> { // swipe left → delete
+                                    scope.launch {
+                                        val snapshot = e.copy()
+                                        vm.deleteById(e.id)
+                                        val res = snackbarHostState.showSnackbar("Deleted", "Undo", true)
+                                        if (res == SnackbarResult.ActionPerformed) vm.add(snapshot.copy(id = 0L))
+                                    }
+                                    true
                                 }
+                                else -> false
                             }
-                        },
-                        isToday = isToday(e.startTime, zone)
+                        }
                     )
+
+                    SwipeToDismissBox(
+                        state = dismissState,
+                        backgroundContent = { DismissBackgroundEvents(dismissState.currentValue) }
+                    ) {
+                        EventRow(
+                            e = e,
+                            selected = e.id in selected,
+                            selectionMode = selectionMode,
+                            onToggleSelect = {
+                                if (e.id in selected) selected.remove(e.id) else selected.add(e.id)
+                            },
+                            onEdit = { onEdit(e.id) },
+                            onDelete = {
+                                scope.launch {
+                                    val snapshot = e.copy()
+                                    vm.deleteById(e.id)
+                                    val res = snackbarHostState.showSnackbar("Deleted", "Undo", true)
+                                    if (res == SnackbarResult.ActionPerformed) vm.add(snapshot.copy(id = 0L))
+                                }
+                            },
+                            onArchive = {
+                                scope.launch {
+                                    vm.archive(e.id)
+                                    val res = snackbarHostState.showSnackbar("Archived", "Undo", true)
+                                    if (res == SnackbarResult.ActionPerformed) vm.unarchive(e.id)
+                                }
+                            },
+                            onOpenMap = { openMapForAddress(context, e.location) },
+                            onNavigate = { startNavigation(context, e.location) },
+                            isToday = isToday(e.startTime, zone),
+                            modifier = Modifier.animateItem(fadeInSpec = null, fadeOutSpec = null, placementSpec = spring<IntOffset>(
+                                        stiffness = Spring.StiffnessMediumLow,
+                                        visibilityThreshold = IntOffset.VisibilityThreshold
+                                    )
+                            )
+                                .semantics(mergeDescendants = true) {}
+                                .combinedClickable(
+                                    onClick = {
+                                        if (selectionMode) {
+                                            if (e.id in selected) selected.remove(e.id) else selected.add(e.id)
+                                        } else onEdit(e.id)
+                                    },
+                                    onLongClick = {
+                                        if (e.id in selected) selected.remove(e.id) else selected.add(e.id)
+                                    }
+                                )
+                        )
+                    }
                 }
             }
         }
     }
 }
 
-private fun isToday(millis: Long, zone: ZoneId): Boolean {
-    val d = Instant.ofEpochMilli(millis).atZone(zone).toLocalDate()
-    return d == LocalDate.now(zone)
+/* ---------- Top bar with bulk actions + filters ---------- */
+
+@Composable
+private fun TopBar(
+    selectionMode: Boolean,
+    selectedCount: Int,
+    onClearSelection: () -> Unit,
+    onSelectAll: () -> Unit,
+    onBulkArchive: () -> Unit,
+    onBulkDelete: () -> Unit,
+    query: String,
+    onQueryChange: (String) -> Unit,
+    oldestFirst: Boolean,
+    onToggleSort: () -> Unit,
+    start: LocalDate?,
+    end: LocalDate?,
+    onSetStart: (LocalDate?) -> Unit,
+    onSetEnd: (LocalDate?) -> Unit,
+    onClearDates: () -> Unit
+) {
+    Column {
+        TopAppBar(
+            title = { if (selectionMode) Text("$selectedCount selected") else Text("All Events") },
+            actions = {
+                if (selectionMode) {
+                    IconButton(onClick = onSelectAll) { Icon(Icons.Default.SelectAll, "Select all") }
+                    IconButton(onClick = onBulkArchive) { Icon(Icons.Default.Archive, "Archive") }
+                    IconButton(onClick = onBulkDelete) { Icon(Icons.Default.Delete, "Delete") }
+                    TextButton(onClick = onClearSelection) { Text("Clear") }
+                } else {
+                    //IconButton(onClick = { /* filters placeholder */ }) { Icon(Icons.Default.FilterList, "Filters") }
+                    TextButton(onClick = onToggleSort) { Text(if (oldestFirst) "Oldest First" else "Newest First") }
+                }
+            }
+        )
+        FilterBar(
+            query = query,
+            onQueryChange = onQueryChange,
+            start = start,
+            end = end,
+            onSetStart = onSetStart,
+            onSetEnd = onSetEnd,
+            onClearDates = onClearDates
+        )
+    }
 }
 
-/* ---------- Shared filter UI (public so other screens can use) ---------- */
+/* ---------- Dismiss background ---------- */
+
+@Composable
+private fun DismissBackgroundEvents(value: SwipeToDismissBoxValue) {
+    val color = when (value) {
+        SwipeToDismissBoxValue.StartToEnd -> MaterialTheme.colorScheme.secondaryContainer // archive
+        SwipeToDismissBoxValue.EndToStart -> MaterialTheme.colorScheme.errorContainer     // delete
+        else -> MaterialTheme.colorScheme.surfaceVariant
+    }
+    val label = when (value) {
+        SwipeToDismissBoxValue.StartToEnd -> "Archive"
+        SwipeToDismissBoxValue.EndToStart -> "Delete"
+        else -> ""
+    }
+    Surface(color = color) {
+        Box(Modifier.fillMaxWidth().height(56.dp), contentAlignment = Alignment.CenterStart) {
+            Text(label, modifier = Modifier.padding(start = 16.dp))
+        }
+    }
+}
+
+/* ---------- Row ---------- */
+
+@Composable
+private fun EventRow(
+    e: Event,
+    selected: Boolean,
+    selectionMode: Boolean,
+    onToggleSelect: () -> Unit,
+    onEdit: () -> Unit,
+    onDelete: () -> Unit,
+    onArchive: () -> Unit,
+    onOpenMap: () -> Unit,
+    onNavigate: () -> Unit,
+    isToday: Boolean,
+    modifier: Modifier = Modifier
+) {
+    var showMenu by remember { mutableStateOf(false) }
+
+    ElevatedCard(modifier) {
+        Column(Modifier.fillMaxWidth().padding(12.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (selectionMode) {
+                    Checkbox(checked = selected, onCheckedChange = { onToggleSelect() })
+                    Spacer(Modifier.width(8.dp))
+                }
+                Text(
+                    e.title.ifBlank { "(no title)" },
+                    style = MaterialTheme.typography.titleMedium,
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.weight(1f)
+                )
+                if (isToday) {
+                    Spacer(Modifier.width(8.dp))
+                    AssistChip(onClick = {}, label = { Text("Today") })
+                }
+            }
+            Spacer(Modifier.height(6.dp))
+            val tf = DateTimeFormatter.ofPattern("MMM d, yyyy • h:mm a")
+            val zone = ZoneId.systemDefault()
+            val start = Instant.ofEpochMilli(e.startTime).atZone(zone)
+            val end = e.endTime?.let { Instant.ofEpochMilli(it).atZone(zone) }
+            Text(
+                if (end != null) "${tf.format(start)} — ${tf.format(end)}" else tf.format(start),
+                style = MaterialTheme.typography.bodySmall
+            )
+            // Address + nav icons row
+            if (e.location.isNotBlank()) {
+                Spacer(Modifier.height(6.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        e.location,
+                        style = MaterialTheme.typography.labelMedium,
+                        maxLines = 2, // show up to 2 lines of address
+                        overflow = TextOverflow.Ellipsis,
+                        modifier = Modifier.weight(1f)
+                    )
+                    Spacer(Modifier.width(8.dp))
+                    IconButton(onClick = onOpenMap) { Icon(Icons.Default.Map, contentDescription = "Map") }
+                    IconButton(onClick = onNavigate) { Icon(Icons.Default.Directions, contentDescription = "Navigate") }
+                }
+            }
+
+
+
+            if (e.description.isNotBlank()) {
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    e.description,
+                    style = MaterialTheme.typography.bodySmall,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis
+                )
+            }
+
+            // Actions dropdown aligned to the right
+            Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+                Box {
+                    FilledTonalButton(onClick = { showMenu = true }) {
+                        Icon(Icons.Default.MoreVert, contentDescription = null)
+                        Spacer(Modifier.width(6.dp))
+                        Text("Actions")
+                    }
+                    DropdownMenu(expanded = showMenu, onDismissRequest = { showMenu = false }) {
+                        DropdownMenuItem(
+                            text = { Text("Edit") },
+                            leadingIcon = { Icon(Icons.Default.Edit, contentDescription = null) },
+                            onClick = { showMenu = false; onEdit() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Archive") },
+                            leadingIcon = { Icon(Icons.Default.Archive, contentDescription = null) },
+                            onClick = { showMenu = false; onArchive() }
+                        )
+                        DropdownMenuItem(
+                            text = { Text("Delete") },
+                            leadingIcon = { Icon(Icons.Default.Delete, contentDescription = null) },
+                            onClick = { showMenu = false; onDelete() }
+                        )
+                    }
+                }
+            }
+        }
+    }
+}
+
+/* ---------- Shared filter UI ---------- */
 
 @Composable
 fun FilterBar(
@@ -173,7 +387,7 @@ fun FilterBar(
     onSetEnd: (LocalDate?) -> Unit,
     onClearDates: () -> Unit
 ) {
-    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
         OutlinedTextField(
             value = query,
             onValueChange = onQueryChange,
@@ -181,11 +395,11 @@ fun FilterBar(
             singleLine = true,
             modifier = Modifier.fillMaxWidth()
         )
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DateField(label = "Start date", date = start, onPick = onSetStart, modifier = Modifier.weight(1f))
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            DateField("Start date", start, onSetStart, Modifier.weight(1f))
         }
-        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            DateField(label = "End date", date = end, onPick = onSetEnd, modifier = Modifier.weight(1f))
+        Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+            DateField("End date", end, onSetEnd, Modifier.weight(1f))
             TextButton(onClick = onClearDates) { Text("Clear") }
         }
     }
@@ -220,79 +434,21 @@ fun DateField(
     }
 }
 
-/* ---------- Row ---------- */
+/* ---------- Helpers ---------- */
 
-@Composable
-private fun EventRow(
-    e: Event,
-    onDelete: (Event) -> Unit,
-    onEdit: () -> Unit,
-    onArchive: (Event) -> Unit,
-    isToday: Boolean
-) {
-    ElevatedCard {
-        Row(
-            Modifier
-                .fillMaxWidth()
-                .padding(12.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(
-                Modifier
-                    .weight(1f)
-                    .clickable { onEdit() }
-            ) {
-                Row(
-                    verticalAlignment = Alignment.CenterVertically,
-                    horizontalArrangement = Arrangement.spacedBy(8.dp)
-                ) {
-                    Text(
-                        e.title.ifBlank { "(no title)" },
-                        style = MaterialTheme.typography.titleMedium,
-                        maxLines = 1,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                    if (isToday) AssistChip(onClick = {}, label = { Text("Today") })
-                }
-                if (e.location.isNotBlank()) {
-                    Text(e.location, style = MaterialTheme.typography.labelMedium)
-                }
-                val tf = DateTimeFormatter.ofPattern("MMM d, yyyy • h:mm a")
-                val zone = ZoneId.systemDefault()
-                val start = Instant.ofEpochMilli(e.startTime).atZone(zone)
-                val end = e.endTime?.let { Instant.ofEpochMilli(it).atZone(zone) }
-                Text(
-                    if (end != null) "${tf.format(start)} — ${tf.format(end)}" else tf.format(start),
-                    style = MaterialTheme.typography.bodySmall
-                )
-                if (e.description.isNotBlank()) {
-                    Text(
-                        e.description,
-                        style = MaterialTheme.typography.bodySmall,
-                        maxLines = 2,
-                        overflow = TextOverflow.Ellipsis
-                    )
-                }
-            }
-            Spacer(Modifier.width(8.dp))
-            var open by remember { mutableStateOf(false) }
-            Box {
-                FilledTonalButton(onClick = { open = true }) { Text("Actions") }
-                DropdownMenu(expanded = open, onDismissRequest = { open = false }) {
-                    DropdownMenuItem(
-                        text = { Text("Edit") },
-                        onClick = { open = false; onEdit() }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Delete") },
-                        onClick = { open = false; onDelete(e) }
-                    )
-                    DropdownMenuItem(
-                        text = { Text("Archive") },
-                        onClick = { open = false; onArchive(e) }
-                    )
-                }
-            }
-        }
-    }
+private fun isToday(millis: Long, zone: ZoneId): Boolean {
+    val d = Instant.ofEpochMilli(millis).atZone(zone).toLocalDate()
+    return d == LocalDate.now(zone)
+}
+private fun openMapForAddress(context: android.content.Context, address: String) {
+    if (address.isBlank()) return
+    val uri = Uri.parse("geo:0,0?q=${Uri.encode(address)}")
+    val intent = Intent(Intent.ACTION_VIEW, uri).apply { setPackage("com.google.android.apps.maps") }
+    context.startActivity(intent)
+}
+private fun startNavigation(context: android.content.Context, address: String) {
+    if (address.isBlank()) return
+    val uri = Uri.parse("google.navigation:q=${Uri.encode(address)}&mode=d")
+    val intent = Intent(Intent.ACTION_VIEW, uri).apply { setPackage("com.google.android.apps.maps") }
+    context.startActivity(intent)
 }
